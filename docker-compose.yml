@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: gc_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./api
+    container_name: gc_api
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT}:8000"
+    volumes:
+      - ./api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  web:
+    build: ./web
+    container_name: gc_web
+    env_file: .env
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT}:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:${API_PORT}
+    command: ["npm","run","dev","--","-p","3000","--hostname","0.0.0.0"]
+
+volumes:
+  db_data:
